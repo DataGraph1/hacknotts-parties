@@ -1,0 +1,19 @@
+@font-face {
+  font-family: 'mondwest-bold';
+  src: url('/fonts/PPMondwest-Regular.otf');
+}
+
+@font-face {
+  font-family: 'mondwest-reg';
+  src: url('/fonts/PPMondwest-Regular.otf');
+}
+
+p {
+    color: whitesmoke;
+    font-family: 'mondwest_bold';
+}
+
+.small_text {
+    color: black;
+    font-family: 'mondwest_reg';
+}

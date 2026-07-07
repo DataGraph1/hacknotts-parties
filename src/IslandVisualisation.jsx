@@ -242,6 +242,7 @@ export default function Visualiser() {
       width: "100%",
       height: "100%",
       display: "flex",
+      flexDirection: "column",
     }}>
       <Canvas 
         style={{
@@ -258,16 +259,17 @@ export default function Visualiser() {
 
         <CameraController/>
 
-        <ambientLight intensity={Math.PI / 2} />
-        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} decay={0} intensity={Math.PI} />
-        <pointLight position={[-10, -10, -10]} decay={0} intensity={Math.PI} />
+        <ambientLight intensity={Math.PI} />
+        <pointLight position={[-100, -100, -100]} decay={0} intensity={Math.PI} />
+        <pointLight position={[-100, -100, 100]} decay={0} intensity={Math.PI / 3} />
         
         {islands.map((island) => (
           <Island key={island.id} pos={island.position} teamNum={island.teamNum} zoomOut={zoomOut} resetZoom={resetZoom} />
         ))}
       </Canvas>
 
-      
+      <button onClick={() => addIsland(0, GetIslandPos(0, islands))}>Add blue island</button>
+      <button onClick={() => addIsland(1, GetIslandPos(1, islands))}>Add green island</button>
     </div>
   )
 }

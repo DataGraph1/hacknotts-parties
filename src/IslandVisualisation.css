@@ -2,5 +2,5 @@ html,
 body,
 #root {
   height: 10%;
-  margin: unset;
+  margin: 0;
 }

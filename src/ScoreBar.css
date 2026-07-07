@@ -9,11 +9,21 @@
 }
 
 p {
-    color: whitesmoke;
-    font-family: 'mondwest_bold';
+  color: whitesmoke;
+  font-family: 'mondwest_bold';
 }
 
 .small_text {
-    color: black;
-    font-family: 'mondwest_reg';
+  color: black;
+  font-family: 'mondwest_reg';
+}
+
+.aqua {
+  background-image: linear-gradient(
+    to bottom,
+    #66676977 0%,
+    #595A5C77 27%,
+    #4D4E5077 49%,
+    #2F2F3177 50%
+  );
 }

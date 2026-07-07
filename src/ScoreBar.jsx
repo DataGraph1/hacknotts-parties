@@ -20,11 +20,14 @@ export default function ScoreBar({
   const percent = total === 0 ? 50 : ((teamLeft.points / total) * 100).toFixed(1);
 
   return (
-    <div
-      style={{
-        margin: "75px",
-        width: "device-width",
-        height: "50px",
+    <div style={{
+        padding: 20,
+        boxSizing: "border-box",
+      }}>
+      <div style={{
+        width: "100%",
+        height: 75,
+        boxSizing: "border-box",
 
         border: "0.75rem solid black",
         borderRadius: "10px",
@@ -40,11 +43,11 @@ export default function ScoreBar({
       }}
       
     >
-      <div style={{
+      <div className="aqua" style={{
         display: "grid",
         gridTemplateColumns: "auto auto",
       }}>
-        <div class="aqua" style={{
+        <div style={{
           textAlign: "left",
           display: "grid",
           gridTemplateColumns: "auto",
@@ -53,7 +56,7 @@ export default function ScoreBar({
           <div><p>{teamLeft.points}p</p></div>
         </div>
 
-        <div class="aqua" style={{
+        <div style={{
           textAlign: "right",
           display: "grid",
           gridTemplateColumns: "auto",
@@ -63,5 +66,7 @@ export default function ScoreBar({
         </div>
       </div> 
     </div>
+    </div>
+    
   );
 }

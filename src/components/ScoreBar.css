@@ -1,0 +1,20 @@
+p.small_text {
+  font-family: 'mondwest-reg';
+}
+
+p {
+  color: whitesmoke;
+  font-family: 'mondwest-bold';
+}
+
+
+
+.aqua {
+  background-image: linear-gradient(
+    to bottom,
+    #66676977 0%,
+    #595A5C77 27%,
+    #4D4E5077 49%,
+    #2F2F3177 50%
+  );
+}

@@ -46,8 +46,15 @@ export default function ScoreEntry() {
                     justifyContent: "space-between",
                 }}>
                     <span/>
-                    <button>PS3</button>
-                    <button>XBox360</button>
+                    
+                    <button style={{
+                        backgroundColor: '#2860a9',
+                    }}>PS3</button>
+
+                    <button style={{
+                        backgroundColor: '#28a94f',
+                    }}>XBox360</button>
+                    
                     <span/>
                 </div>
             </span>

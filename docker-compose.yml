@@ -1,0 +1,54 @@
+networks:
+  netparties:
+    name: netparties
+    ipam:
+      config:
+        - subnet: 172.39.0.0/24
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: postgres
+    restart: unless-stopped
+
+    env_file: ".env"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - netparties
+  
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /usr/local/app/src
+        - action: rebuild
+          path: ./backend/requirements.txt
+
+    env_file:
+      - .env
+    networks:
+      - netparties
+    depends_on:
+      - postgres
+  
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    env_file:
+      - .env
+    networks:
+      - netparties
+    depends_on:
+      - postgres
+      - backend
+
+volumes:
+  postgres_data:

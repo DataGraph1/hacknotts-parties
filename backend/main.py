@@ -1,14 +1,10 @@
 # TODO:
-# - enable / disable point enteries
-# - end point to access islands
-# - auto create islands on point threshholds
-# - auto setup (decide how much, probs just loading island dicts from database)
 # - maybe some pretty refactoring?
 # - access control (viewing for all, adding & changing "exists" for admins, full access only to this script)
 
 from contextlib import asynccontextmanager
 from typing import Dict
-import asyncpg, random
+import asyncpg, random, asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,10 +16,29 @@ from .database import (
 )
 
 
+# if you decide to change this RUN THE `/reset_table` END POINT!!! otherwise the database wont match with the code
+# TODO: add this to a config or smthing and have it loaded at runtime
+TEAM_NAMES : list[str] = [
+    "Xbox",
+    "PS2",
+]
+
+# not constant cause it gets shuffled for random selection
+island_connecting_offsets: list[Pos] = [
+    (-1, 0), (0, -1), (1, 0), (0, 1)
+]
+type Pos = tuple[int, int]
+growable_islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
+used_islands: Dict[Pos, bool] = {}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
+    await setup()
+
     yield
+
     await disconnect_db()
 
 app = FastAPI(
@@ -41,22 +56,6 @@ app.add_middleware(
 )
 
 
-# if you decide to change this RUN THE `/reset_table` END POINT!!! otherwise the database wont match with the code
-# TODO: add this to a config or smthing and have it loaded at runtime
-TEAM_NAMES : list[str] = [
-    "Xbox",
-    "PS2",
-]
-
-# not constant cause it gets shuffled for random selection
-island_connecting_offsets: list[Pos] = [
-    (-1, 0), (0, -1), (1, 0), (0, 1)
-]
-type Pos = tuple[int, int]
-growable_islands: Dict[str, list[Pos]] = {}
-used_islands: Dict[Pos, bool] = {}
-
-
 @app.get("/ping")
 async def ping():
     return "pong"
@@ -69,6 +68,10 @@ async def health():
 # this could have a better name cause it also resets itself + the islands Dictionary's,
 # but i want to keep db & dictionary changes together to ensure they dont desync
 async def db_setup():
+    # These first 2 lines cause cache to be cleared, otherwise it causes problems 
+    # when we drop the tables
+    await disconnect_db()
+    await connect_db()
     pool = await get_pool()
 
     async with pool.acquire() as conn:
@@ -82,7 +85,7 @@ async def db_setup():
             DROP TABLE IF EXISTS islands
             """
         )
-        growable_islands.clear()
+        growable_islands = {name: [] for name in TEAM_NAMES}
         used_islands.clear()
 
         await conn.execute(
@@ -120,7 +123,7 @@ async def db_setup():
 
 def team_names_enum_setup(team_names: list[str]) -> str:
     output = "CREATE TYPE team_names AS ENUM ("
-    
+
     for val, name in enumerate(team_names):
         output += f"'{name}'"
         if val < len(team_names)-1:
@@ -132,14 +135,22 @@ def team_names_enum_setup(team_names: list[str]) -> str:
 
 @app.get("/add_points")
 async def add_points_endpoint(name: str, value: int):
+    LOW_VALUE = 1
+    HIGH_VALUE = 100
+
+    if value < LOW_VALUE or value > HIGH_VALUE:
+        return f"ERROR: value {value} is out of range {LOW_VALUE} to {HIGH_VALUE}"
     try:
-        await add_point_entry(name, value)
+        await add_points(name, value)
     except asyncpg.exceptions.InvalidTextRepresentationError as e:
         return f"ERROR: name '{name}' is not a valid name within {TEAM_NAMES}"
 
     return "SUCCESS"
 
-async def add_point_entry(team_name: str, amount: int):
+async def add_points(team_name: str, amount: int):
+    for _ in range(amount):
+        await generate_island(team_name)
+
     pool = await get_pool()
 
     async with pool.acquire() as conn:
@@ -149,6 +160,29 @@ async def add_point_entry(team_name: str, amount: int):
             VALUES ('{team_name}', {amount});
             """
         )
+
+@app.get("/entry_exists_status")
+async def set_point_exists_status(entry_id: int, exists: bool):
+    pool = await get_pool()
+
+    async with pool.acquire() as conn:
+        if not (await conn.fetch(
+            f"""
+            SELECT EXISTS
+            (SELECT 1 FROM team_points WHERE id = {entry_id})
+            """
+        ))[0][0]:
+            return f"ERROR: Entry with ID {entry_id} doesn't exist"
+
+        await conn.fetch(
+            f"""
+            UPDATE team_points
+            SET exists = {exists}
+            WHERE id = {entry_id}
+            """
+        )
+
+        return "SUCCESS"
 
 
 @app.get("/get_sum_points")
@@ -179,6 +213,8 @@ async def generate_island(team_name: str):
     return f"SUCCESS: added team '{team_name}' island to pos {test_pos}"
 
 async def add_island(pos: Pos, team_name: str):
+    print("GROWABLE NOW: ", growable_islands)
+
     used_islands[pos] = True
     await save_island_to_db(pos, team_name)
     await set_island_growablity(pos, team_name, check_island_growable(pos))
@@ -193,7 +229,7 @@ def check_island_growable(pos: Pos) -> bool:
     for offset in island_connecting_offsets:
         check_pos: Pos = (pos[0] + offset[0],
                           pos[1] + offset[1])
-        
+
         if not check_pos in used_islands:
             return True
 
@@ -217,11 +253,10 @@ async def save_island_to_db(pos: Pos, team_name: str):
 async def set_island_growablity(pos: Pos, team_name: str, growable: bool):
     growable_islands[team_name].append(pos)
 
-    pool = await get_pool()
-
     if not pos in used_islands:
         return f"ERROR: pos {pos} is empty"
 
+    pool = await get_pool()
     async with pool.acquire() as conn:
         try:
             await conn.fetch(
@@ -232,8 +267,9 @@ async def set_island_growablity(pos: Pos, team_name: str, growable: bool):
                 """
             )
         except Exception as e:
-            print(type(e))
-            print(e)
+            return e
+
+    return "SUCCESS"
 
 async def islands_setup():
     starting_x_pos : int = -len(TEAM_NAMES)
@@ -241,16 +277,57 @@ async def islands_setup():
     for i, v in enumerate(TEAM_NAMES):
         await add_island((starting_x_pos+2*i, 0), v)
 
+@app.get("/get_islands")
+async def get_islands() -> Dict[str, list[Pos]]:
+    islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT team_name, x, y
+            FROM islands
+            WHERE team_name = ANY($1)
+            """, TEAM_NAMES
+        )
 
-# TODO: Have this like autoload or something & 
+        for row in rows:
+            islands[row["team_name"]].append((row["x"], row["y"]))
+
+    return islands
+
+
+async def load_island_data_from_db():
+    global growable_islands
+    growable_islands = {name: [] for name in TEAM_NAMES}
+    global used_islands
+    used_islands = {}
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT x, y, team_name, growable
+            FROM islands
+            """
+        )
+
+        print(rows)
+
+        for row in rows:
+            if row["growable"]:
+                growable_islands[row["team_name"]].append((row["x"], row["y"]))
+            used_islands[(row["x"], row["y"])] = True
+
+
+# TODO: Have this like autoload or something &
 # make the internal island dictionaries load from db if it has data
 @app.get("/setup")
 async def setup():
-    await db_setup()
-
-    for name in TEAM_NAMES:
-        growable_islands[name] = []
-
-    await islands_setup()
-
+    await load_island_data_from_db()
     return "SUCCESS"
+
+@app.get("/restart")
+async def restart():
+    await db_setup()
+    await islands_setup()

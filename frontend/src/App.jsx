@@ -4,8 +4,8 @@ import {
     Route,
 } from "react-router-dom";
 
-import Frontend from "./Frontend.jsx"
-import Backend from "./Backend.jsx"
+import Frontend from "./Viewer.jsx"
+import Admin from "./Admin.jsx"
 import TestPage from "./test.jsx"
 
 
@@ -15,7 +15,7 @@ export default function App() {
     <Router>
         <Routes>
             <Route exact path="/" element={<Frontend />} />
-            <Route path="/backend" element={<Backend />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="/test" element={<TestPage />} />
         </Routes>
     </Router>

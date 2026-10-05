@@ -5,7 +5,7 @@ import ColumnGroupingTable from "./components/Table.jsx"
 import ScoreBar from "./components/ScoreBar.jsx"
 
 
-export default function Backend() {
+export default function Admin() {
     return(
         <div style={{
             height: "100vh",

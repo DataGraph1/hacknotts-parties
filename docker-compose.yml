@@ -39,13 +39,30 @@ services:
       - postgres
   
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: dev
+
     ports:
-      - "5173:80"
+      - "5173:5173"
+
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/public
+        - action: rebuild
+          path: ./frontend/package.json
+
     env_file:
       - .env
+
     networks:
       - netparties
+
     depends_on:
       - postgres
       - backend

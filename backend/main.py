@@ -1,5 +1,5 @@
 # TODO:
-# - maybe some pretty refactoring?
+# - maybe some refactoring?
 # - access control (viewing for all, adding & changing "exists" for admins, full access only to this script)
 
 from contextlib import asynccontextmanager
@@ -16,7 +16,7 @@ from .database import (
 )
 
 
-# if you decide to change this RUN THE `/reset_table` END POINT!!! otherwise the database wont match with the code
+# if you decide to change this RUN THE `/restart` END POINT!!! otherwise the database wont match with the code
 # TODO: add this to a config or smthing and have it loaded at runtime
 TEAM_NAMES : list[str] = [
     "Xbox",
@@ -28,6 +28,8 @@ island_connecting_offsets: list[Pos] = [
     (-1, 0), (0, -1), (1, 0), (0, 1)
 ]
 type Pos = tuple[int, int]
+# TODO: I assume these should be removed and just queried from database whenever there needed
+# to simply code and prevent db & lists holding different data
 growable_islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
 used_islands: Dict[Pos, bool] = {}
 
@@ -56,10 +58,6 @@ app.add_middleware(
 )
 
 
-@app.get("/ping")
-async def ping():
-    return "pong"
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -78,6 +76,8 @@ async def db_setup():
     await connect_db()
     pool = await get_pool()
 
+    # TODO: Assuming theres a better way to just clear the table and reset SERIAL instead of 
+    # dropping and recreating them each time?
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -323,8 +323,6 @@ async def load_island_data_from_db():
             used_islands[(row["x"], row["y"])] = True
 
 
-# TODO: Have this like autoload or something &
-# make the internal island dictionaries load from db if it has data
 @app.get("/setup")
 async def setup():
     await load_island_data_from_db()

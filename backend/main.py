@@ -4,7 +4,7 @@
 
 from contextlib import asynccontextmanager
 from typing import Dict
-import asyncpg, random, asyncio
+import asyncpg, random
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +68,10 @@ async def health():
 # this could have a better name cause it also resets itself + the islands Dictionary's,
 # but i want to keep db & dictionary changes together to ensure they dont desync
 async def db_setup():
+    global growable_islands
+    global used_islands
+    
+    
     # These first 2 lines cause cache to be cleared, otherwise it causes problems 
     # when we drop the tables
     await disconnect_db()
@@ -198,7 +202,6 @@ async def get_points_endpoint(name: str):
     return amount[0][0]
 
 
-@app.get("/generate_island")
 async def generate_island(team_name: str):
     growing_from_pos = random.choice(growable_islands[team_name])
     random.shuffle(island_connecting_offsets)

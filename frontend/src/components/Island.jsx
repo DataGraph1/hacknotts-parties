@@ -71,14 +71,24 @@ export default function Island({pos, teamNum, zoomOut, resetZoom, ...props}) {
 
 
   return (
-    <mesh
-      {...props}
-      position={(pos)}
-      ref={meshRef}
-      scale={1}
-    >
-      <boxGeometry args={[1, .3, 1]} />
-      <meshStandardMaterial color={(teamNum === 0) ? "#2860a9" : "#28a94f"} />
-    </mesh>
+    <group {...props} position={[pos[0], 0, pos[2]]}>
+      <mesh position={[0, -0.17, 0.08]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.15, 1.15]} />
+        <meshBasicMaterial
+          color="#061926"
+          transparent
+          opacity={0.45}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh
+        position={[0, pos[1], 0]}
+        ref={meshRef}
+        scale={1}
+      >
+        <boxGeometry args={[1, .3, 1]} />
+        <meshStandardMaterial color={(teamNum === 0) ? "#2860a9" : "#28a94f"} />
+      </mesh>
+    </group>
   )
 }

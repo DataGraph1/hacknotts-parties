@@ -148,15 +148,19 @@ export default function Visualiser() {
 
 
   return (
-    <div style={{
+    <div className="bg" style={{
       width: "100%",
       height: "100%",
       display: "flex",
       flexDirection: "column",
     }}>
+      <div className="bggrid" />
       <Canvas 
         style={{
           flex: 1,
+          background: "transparent",
+          position: "relative",
+          zIndex: 1,
         }}>
 
         <OrthographicCamera

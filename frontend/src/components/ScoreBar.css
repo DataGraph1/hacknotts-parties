@@ -1,20 +1,20 @@
-p.small_text {
-  font-family: 'mondwest-reg';
+p.bold_text {
+  font-family: 'mondwest-bold';
+  font-size: 2rem;
 }
 
 p {
   color: whitesmoke;
-  font-family: 'mondwest-bold';
+  font-size: 0.75rem;
 }
 
 
 
 .aqua {
-  background-image: linear-gradient(
-    to bottom,
-    #66676977 0%,
-    #595A5C77 27%,
-    #4D4E5077 49%,
-    #2F2F3177 50%
-  );
+  min-height: 2.9rem;
+  padding-inline: 1rem;
+  border-color: #5b5b5b;
+  background: linear-gradient(180deg, #ededed33 0%, #adadad33 48%, #84848433 52%, #c0c0c033 100%);
+  box-shadow: inset 0 1px #ffffff33, 0 2px 5px rgba(67, 67, 67, 0.068);
+  color: #ffffff;
 }

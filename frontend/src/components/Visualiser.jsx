@@ -95,7 +95,7 @@ function GetIslandPos(teamNum, islands) {
 }
 
 
-export default function Visualiser() {
+export default function Visualiser(val) {
   const [islands, updateIslands] = useState([]);
 
   const addIsland = (teamNum, tilemapPos) => {
@@ -114,6 +114,11 @@ export default function Visualiser() {
       },
     ]);
   };
+
+  // for (let coord of val) {
+  //   let teamNum = 0
+  //   if coord.
+  // }
 
   useEffect(() => {
     updateIslands(() => []); // fix for strict mode where it triggers all renders twice
@@ -148,13 +153,12 @@ export default function Visualiser() {
 
 
   return (
-    <div className="bg" style={{
+    <div style={{
       width: "100%",
       height: "100%",
       display: "flex",
       flexDirection: "column",
     }}>
-      <div className="bggrid" />
       <Canvas 
         style={{
           flex: 1,

@@ -3,10 +3,10 @@
   src: url('/fonts/PPNeueBit-Bold.otf');
 }
 
-@font-face {
+/* @font-face {
   font-family: 'mondwest-reg';
   src: url('/fonts/PPMondwest-Regular.otf');
-}
+} */
 
 
 :root {
@@ -23,7 +23,7 @@
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   font: 18px/145%;
-  font-family: 'mondwest-reg';
+  font-family: 'Tahoma, Verdana, Arial, sans-serif';
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);

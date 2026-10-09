@@ -6,20 +6,21 @@ export default function ScoreBar({
   right,
 }) {
   const teamLeft = {
-    "name": "PS3",
+    "name": "PS2",
     "colour": "#2860a9",
     "points": left,
   }
   const teamRight = {
-    "name": "Xbox 360",
+    "name": "Xbox",
     "colour": "#28a94f",
     "points": right,
   }
 
   const total = teamLeft.points + teamRight.points;
   const percent = total === 0 ? 50 : ((teamLeft.points / total) * 100).toFixed(1);
-
+  
   return (
+    // colour background
     <div style={{
         padding: 20,
         boxSizing: "border-box",
@@ -43,30 +44,35 @@ export default function ScoreBar({
       }}
       
     >
+      {/* shader over lay */}
       <div className="aqua" style={{
         display: "grid",
         gridTemplateColumns: "auto auto",
+        padding: 3,
       }}>
+        {/* left team text */}
         <div style={{
           textAlign: "left",
           display: "grid",
           gridTemplateColumns: "auto",
+          margin: 3,
         }}>
+          <div><p className='bold_text'>{teamLeft.points}p</p></div>
           <div><b><p>{percent}%</p></b></div>
-          <div><p className='small_text'>{teamLeft.points}p</p></div>
         </div>
-
+        
+        {/* right team text */}
         <div style={{
           textAlign: "right",
           display: "grid",
           gridTemplateColumns: "auto",
+          margin: 3,
         }}>
+          <div><p className='bold_text'>{teamRight.points}p</p></div>
           <div><p>{100-percent}%</p></div>
-          <div><p>{teamRight.points}p</p></div>
         </div>
       </div> 
     </div>
     </div>
-    
   );
 }

@@ -25,7 +25,7 @@ export default function Admin() {
                 <ScoreEntry/>
                 <ColumnGroupingTable/>
             </div>
-
+            
             <ScoreBar left={105} right={282}/>
         </div>
     )

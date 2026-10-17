@@ -6,7 +6,7 @@ import {
 
 import Viewer from "./Viewer.jsx"
 import Admin from "./Admin.jsx"
-import TestPage from "./test.jsx"
+import Webhook from "./Webhook.jsx"
 
 
 
@@ -16,7 +16,7 @@ export default function App() {
         <Routes>
             <Route exact path="/" element={<Viewer />} />
             <Route path="/admin" element={<Admin />} />
-            <Route path="/test" element={<TestPage />} />
+            <Route path="/test" element={<Webhook />} />
         </Routes>
     </Router>
   );

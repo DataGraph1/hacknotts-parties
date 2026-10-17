@@ -167,6 +167,48 @@ async def db_setup():
             EXECUTE FUNCTION notify_new_island();
             """
         )
+        # await conn.execute(
+        #     """
+        #     CREATE OR REPLACE FUNCTION notify_clear_islands()
+            #     RETURNS trigger AS $$
+            # BEGIN
+            #     PERFORM pg_notify('clear_islands', '');
+            #     RETURN NEW;
+            # END;
+            # $$ LANGUAGE plpgsql;
+
+            # CREATE TRIGGER clear_islands_trigger
+            #     AFTER TRUNCATE ON islands
+            # EXECUTE FUNCTION notify_clear_islands();
+        #     """
+        # )
+
+        # await conn.execute(
+        #     """
+            # CREATE OR REPLACE FUNCTION notify_point_update()
+            #     RETURNS trigger AS $$
+            # BEGIN
+            #     PERFORM pg_notify('point_update', '');
+            #     RETURN NEW;
+            # END;
+            # $$ LANGUAGE plpgsql;
+
+
+            # CREATE TRIGGER point_insert_trigger
+            #     AFTER INSERT ON team_points
+            # EXECUTE FUNCTION notify_point_update();
+
+            # CREATE TRIGGER point_update_trigger
+            #     AFTER UPDATE ON team_points
+            # EXECUTE FUNCTION notify_point_update();
+
+            # CREATE TRIGGER point_truncate_trigger
+            #     AFTER TRUNCATE ON team_points
+            # EXECUTE FUNCTION notify_point_update();
+        #     """
+        # )
+
+
 
     print("Done", flush=True)
 
@@ -237,16 +279,26 @@ async def set_point_exists_status(entry_id: int, exists: bool):
 
 
 @app.get("/get_sum_points")
-async def get_points_endpoint(name: str):
+async def get_points() -> Dict[str, int]:
+    points: Dict[str, int] = {name: 0 for name in TEAM_NAMES}
     pool = await get_pool()
 
     async with pool.acquire() as conn:
-        try:
-            amount = await conn.fetch(f"SELECT SUM(amount) FROM team_points WHERE team_name='{name}';")
-        except asyncpg.exceptions.InvalidTextRepresentationError as e:
-            return f"ERROR: name '{name}' is not a valid name within {TEAM_NAMES}"
+        rows = await conn.fetch(
+            """
+            SELECT team_name, SUM(amount)
+            FROM team_points
+            GROUP BY team_name
+            """
+        )
+        
+        for row in rows:
+            if row["sum"] == None:
+                points[row["team_name"]] = 0
+            else:
+                points[row["team_name"]] = row["sum"]
 
-    return amount[0][0]
+    return points
 
 
 @app.get("/get_islands")
@@ -389,10 +441,18 @@ async def restart():
 
 
 
+def on_new_island(
+    conn: asyncpg.Connection,
+    pid: int,
+    channel: str,
+    payload: str,
+):
+    asyncio.create_task(handle_new_island(payload))
 async def handle_new_island(payload: str):
-    print("hello")
     island = json.loads(payload)
-    
+
+    print("-> new islands")
+
     await webhook_announcement(
         event = "island.new",
         data = {
@@ -402,13 +462,37 @@ async def handle_new_island(payload: str):
         }
     )
 
-def on_new_island(
+def on_clear_islands(
     conn: asyncpg.Connection,
     pid: int,
     channel: str,
     payload: str,
 ):
-    asyncio.create_task(handle_new_island(payload))
+    asyncio.create_task(handle_clear_islands())
+async def handle_clear_islands():
+    print("-> clear islands")
+
+    await webhook_announcement(
+        event = "island.clear",
+        data = {}
+    )
+
+def on_point_update(
+    conn: asyncpg.Connection,
+    pid: int,
+    channel: str,
+    payload: str,
+):
+    asyncio.create_task(handle_point_update())
+async def handle_point_update():
+    print("-> point update")
+
+    data = await get_points()
+
+    await webhook_announcement(
+        event = "point.change",
+        data = data
+    )
 
 
 class ListenerConnection(Protocol):
@@ -425,17 +509,20 @@ class ListenerConnection(Protocol):
     ) -> object: ...
 
 async def start_listener(conn: ListenerConnection):
+    await conn.add_listener("clear_islands", on_clear_islands)
     await conn.add_listener("new_island", on_new_island)
+    await conn.add_listener("point_update", on_point_update)
 
 
 async def stop_listener(conn: ListenerConnection):
     await conn.remove_listener("new_island", on_new_island)
+    await conn.remove_listener("clear_islands", on_clear_islands)
+    await conn.add_listener("point_update", on_point_update)
 
 
 
 # ai generated
 listeners: set[asyncio.Queue] = set()
-
 
 @app.get("/events")
 async def webhook_listen(request: Request):

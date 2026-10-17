@@ -95,35 +95,13 @@ function GetIslandPos(teamNum, islands) {
 }
 
 
-export default function Visualiser(val) {
-  const [islands, updateIslands] = useState([]);
-
-  const addIsland = (teamNum, tilemapPos) => {
-    console.log("Added island: " + teamNum);
-
-    updateIslands((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        teamNum: teamNum,
-        position: [
-          tilemapPos[0],
-          1,
-          tilemapPos[1]
-        ],
-      },
-    ]);
-  };
-
-  // for (let coord of val) {
-  //   let teamNum = 0
-  //   if coord.
-  // }
-
+export default function Visualiser({ 
+  islands
+}) {
   useEffect(() => {
-    updateIslands(() => []); // fix for strict mode where it triggers all renders twice
-    addIsland(0, [ 1,  1]);
-    addIsland(1, [-1, -1]);
+    // updateIslands(() => []); // fix for strict mode where it triggers all renders twice
+    // addIsland(0, [ 1,  1]);
+    // addIsland(1, [-1, -1]);
   }, []);
 
   const cameraRef = useRef();
@@ -183,9 +161,6 @@ export default function Visualiser(val) {
           <Island key={island.id} pos={island.position} teamNum={island.teamNum} zoomOut={zoomOut} resetZoom={resetZoom} />
         ))}
       </Canvas>
-
-      <button onClick={() => addIsland(0, GetIslandPos(0, islands))}>Add blue island</button>
-      <button onClick={() => addIsland(1, GetIslandPos(1, islands))}>Add green island</button>
     </div>
   )
 }

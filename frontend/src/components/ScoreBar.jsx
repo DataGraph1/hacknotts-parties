@@ -69,7 +69,7 @@ export default function ScoreBar({
           margin: 3,
         }}>
           <div><p className='bold_text'>{teamRight.points}p</p></div>
-          <div><p>{100-percent}%</p></div>
+          <div><p>{(100-percent).toFixed(1)}%</p></div>
         </div>
       </div> 
     </div>

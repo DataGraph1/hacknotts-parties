@@ -2,12 +2,16 @@
 # - maybe some refactoring?
 # - access control (viewing for all, adding & changing "exists" for admins, full access only to this script)
 
+from collections.abc import Callable
 from contextlib import asynccontextmanager
-from typing import Dict
-import asyncpg, random
+from typing import Dict, AsyncIterator, Protocol
+from pydantic import BaseModel
+import asyncpg, asyncio, random, json
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
 from .database import (
     connect_db,
     disconnect_db,
@@ -28,20 +32,28 @@ island_connecting_offsets: list[Pos] = [
     (-1, 0), (0, -1), (1, 0), (0, 1)
 ]
 type Pos = tuple[int, int]
-# TODO: I assume these should be removed and just queried from database whenever there needed
-# to simply code and prevent db & lists holding different data
-growable_islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
-used_islands: Dict[Pos, bool] = {}
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_db()
-    await setup()
 
-    yield
+    pool = await get_pool()
 
-    await disconnect_db()
+    listener_conn = await pool.acquire()
+
+    try:
+        await start_listener(listener_conn) # i have NO IDEA what these errors mean but it works so lets ignore them
+        app.state.listener_conn = listener_conn
+
+        yield
+
+    finally:
+        await stop_listener(listener_conn)
+        await pool.release(listener_conn)
+        await disconnect_db()
+
 
 app = FastAPI(
     title="PostgreSQL API",
@@ -60,25 +72,44 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
+    print("ping!")
     return {"status": "ok"}
 
+async def clear_db():
+    pool = await get_pool()
+    
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            TRUNCATE team_points, islands;
+            """
+        )
 
-# this could have a better name cause it also resets itself + the islands Dictionary's,
-# but i want to keep db & dictionary changes together to ensure they dont desync
+        for name in TEAM_NAMES:
+            await conn.execute(
+                f"""
+                ALTER TYPE team_names ADD VALUE IF NOT EXISTS '{name}';
+                """
+            )
+
+    return "SUCCESS"
+
+
+# this current causes errors so lets not use it
+# this should be used to create the db if not already existing
 async def db_setup():
-    global growable_islands
-    global used_islands
-    
-    
     # These first 2 lines cause cache to be cleared, otherwise it causes problems 
     # when we drop the tables
+    print("Started db", flush=True)
     await disconnect_db()
     await connect_db()
     pool = await get_pool()
+    print("Reset pool", flush=True)
 
     # TODO: Assuming theres a better way to just clear the table and reset SERIAL instead of 
     # dropping and recreating them each time?
     async with pool.acquire() as conn:
+        print("Dropping", flush=True)
         await conn.execute(
             """
             DROP TABLE IF EXISTS team_points
@@ -89,8 +120,6 @@ async def db_setup():
             DROP TABLE IF EXISTS islands
             """
         )
-        growable_islands = {name: [] for name in TEAM_NAMES}
-        used_islands.clear()
 
         await conn.execute(
             """
@@ -98,6 +127,7 @@ async def db_setup():
             """
         )
 
+        print("Creating", flush=True)
         await conn.execute(team_names_enum_setup(TEAM_NAMES))
         await conn.execute(
             """
@@ -109,8 +139,6 @@ async def db_setup():
             );
             """
         )
-        # growable not set to NOT NULL, as instead of being assigned at first creation,
-        # we change it in set_island_growablity to ensure db & growable_islands Dict stay in sync
         await conn.execute(
             """
             CREATE TABLE islands (
@@ -122,6 +150,25 @@ async def db_setup():
             );
             """
         )
+        print("Commands", flush=True)
+        await conn.execute(
+            """
+            CREATE OR REPLACE FUNCTION notify_new_island()
+                RETURNS trigger AS $$
+            BEGIN
+                PERFORM pg_notify('new_island', row_to_json(NEW)::text);
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+
+            CREATE TRIGGER new_island_trigger
+                AFTER INSERT ON islands
+                FOR EACH ROW
+            EXECUTE FUNCTION notify_new_island();
+            """
+        )
+
+    print("Done", flush=True)
 
     return "SUCCESS"
 
@@ -202,38 +249,91 @@ async def get_points_endpoint(name: str):
     return amount[0][0]
 
 
+@app.get("/get_islands")
+async def get_islands() -> Dict[str, list[Pos]]:
+    islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT team_name, x, y
+            FROM islands
+            WHERE team_name = ANY($1)
+            """, TEAM_NAMES
+        )
+
+        for row in rows:
+            islands[row["team_name"]].append((row["x"], row["y"]))
+
+    return islands
+
+async def get_growable_islands() -> Dict[str, list[Pos]]:
+    islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
+    
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT team_name, x, y
+            FROM islands
+            WHERE team_name = ANY($1) and growable = true
+            """, TEAM_NAMES
+        )
+
+        for row in rows:
+            islands[row["team_name"]].append((row["x"], row["y"]))
+
+    return islands
+
+async def get_used_island_pos() -> Dict[Pos, bool]: 
+    used_pos: Dict[Pos, bool] = {}
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT x, y
+            FROM islands
+            WHERE team_name = ANY($1)
+            """, TEAM_NAMES
+        )
+
+        for row in rows:
+            used_pos[(row["x"], row["y"])] = True
+
+    return used_pos
+
+
 async def generate_island(team_name: str):
-    growing_from_pos = random.choice(growable_islands[team_name])
+    growing_from_pos = random.choice((await get_growable_islands())[team_name])
     random.shuffle(island_connecting_offsets)
 
     for offset in island_connecting_offsets:
         test_pos: Pos = (growing_from_pos[0] + offset[0],
                          growing_from_pos[1] + offset[1])
-        if not test_pos in used_islands:
+        if not test_pos in (await get_used_island_pos()):
             break
 
     await add_island(test_pos, team_name)
     return f"SUCCESS: added team '{team_name}' island to pos {test_pos}"
 
 async def add_island(pos: Pos, team_name: str):
-    print("GROWABLE NOW: ", growable_islands)
-
-    used_islands[pos] = True
     await save_island_to_db(pos, team_name)
-    await set_island_growablity(pos, team_name, check_island_growable(pos))
+    await set_island_growablity(pos, team_name, (await check_island_growable(pos)))
 
     for offset in island_connecting_offsets:
         check_pos: Pos = (pos[0] + offset[0],
                           pos[1] + offset[1])
-        if check_pos in used_islands:
-            await set_island_growablity(check_pos, team_name, check_island_growable(check_pos));
+        if check_pos in (await get_used_island_pos()):
+            await set_island_growablity(check_pos, team_name, (await check_island_growable(check_pos)));
 
-def check_island_growable(pos: Pos) -> bool:
+async def check_island_growable(pos: Pos) -> bool:
     for offset in island_connecting_offsets:
         check_pos: Pos = (pos[0] + offset[0],
                           pos[1] + offset[1])
 
-        if not check_pos in used_islands:
+        if not check_pos in (await get_used_island_pos()):
             return True
 
     return False
@@ -254,9 +354,7 @@ async def save_island_to_db(pos: Pos, team_name: str):
             return f"ERROR: name '{team_name}' is not a valid name within {TEAM_NAMES}"
 
 async def set_island_growablity(pos: Pos, team_name: str, growable: bool):
-    growable_islands[team_name].append(pos)
-
-    if not pos in used_islands:
+    if not pos in (await get_used_island_pos()):
         return f"ERROR: pos {pos} is empty"
 
     pool = await get_pool()
@@ -280,55 +378,115 @@ async def islands_setup():
     for i, v in enumerate(TEAM_NAMES):
         await add_island((starting_x_pos+2*i, 0), v)
 
-@app.get("/get_islands")
-async def get_islands() -> Dict[str, list[Pos]]:
-    islands: Dict[str, list[Pos]] = {name: [] for name in TEAM_NAMES}
-    
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT team_name, x, y
-            FROM islands
-            WHERE team_name = ANY($1)
-            """, TEAM_NAMES
-        )
 
-        for row in rows:
-            islands[row["team_name"]].append((row["x"], row["y"]))
-
-    return islands
-
-
-async def load_island_data_from_db():
-    global growable_islands
-    growable_islands = {name: [] for name in TEAM_NAMES}
-    global used_islands
-    used_islands = {}
-    
-    pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT x, y, team_name, growable
-            FROM islands
-            """
-        )
-
-        print(rows)
-
-        for row in rows:
-            if row["growable"]:
-                growable_islands[row["team_name"]].append((row["x"], row["y"]))
-            used_islands[(row["x"], row["y"])] = True
-
-
-@app.get("/setup")
-async def setup():
-    await load_island_data_from_db()
-    return "SUCCESS"
 
 @app.get("/restart")
 async def restart():
-    await db_setup()
+    await clear_db()
     await islands_setup()
+    
+    return {"status": "SUCCESS"}
+
+
+
+async def handle_new_island(payload: str):
+    print("hello")
+    island = json.loads(payload)
+    
+    await webhook_announcement(
+        event = "island.new",
+        data = {
+            "x": island["x"],
+            "y": island["y"],
+            "team": island["team_name"]
+        }
+    )
+
+def on_new_island(
+    conn: asyncpg.Connection,
+    pid: int,
+    channel: str,
+    payload: str,
+):
+    asyncio.create_task(handle_new_island(payload))
+
+
+class ListenerConnection(Protocol):
+    async def add_listener(
+        self,
+        channel: str,
+        callback: Callable,
+    ) -> object: ...
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable,
+    ) -> object: ...
+
+async def start_listener(conn: ListenerConnection):
+    await conn.add_listener("new_island", on_new_island)
+
+
+async def stop_listener(conn: ListenerConnection):
+    await conn.remove_listener("new_island", on_new_island)
+
+
+
+# ai generated
+listeners: set[asyncio.Queue] = set()
+
+
+@app.get("/events")
+async def webhook_listen(request: Request):
+    queue: asyncio.Queue = asyncio.Queue()
+    listeners.add(queue)
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            # Tell the frontend that its listener is registered.
+            yield 'event: connected\ndata: {"status": "connected"}\n\n'
+
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(), timeout=15
+                    )
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    # Keep the SSE connection alive.
+                    yield ": keep-alive\n\n"
+        finally:
+            listeners.discard(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+async def webhook_announcement(event: str, data: dict):
+    item = {
+        "event": event,
+        "data": data
+    }
+
+    for queue in list(listeners):
+        print("Sending data to: ", queue)
+        queue.put_nowait(item)
+
+    return {
+        "status": "sent",
+        "listeners": len(listeners),
+        "event": event,
+    }
+
+@app.get("/listeners")
+async def get_listeners():
+    return {"listeners": len(listeners)}

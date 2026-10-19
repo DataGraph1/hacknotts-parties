@@ -5,12 +5,13 @@
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Dict, AsyncIterator, Protocol
-from pydantic import BaseModel
-import asyncpg, asyncio, random, json
+import asyncpg, asyncio, random, json, os, secrets
 
-from fastapi import FastAPI, Request
+
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import APIKeyHeader
 
 from .database import (
     connect_db,
@@ -68,6 +69,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def load_api_key() -> str:
+    key = os.environ.get("APP_API_KEY")
+    if not key:
+        raise RuntimeError("APP_API_KEY environment variable is required")
+    return key
+API_KEY: str = load_api_key()
+api_key_header = APIKeyHeader(name="X-API-Key")
+
+def require_api_key(api_key: str = Depends(api_key_header)):
+    if not secrets.compare_digest(api_key, API_KEY):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key",
+        )
+
+@app.get("/restricted_test", dependencies=[Depends(require_api_key)])
+async def restricted_test():
+    return "SUCCESS"
+
 
 
 @app.get("/health")
@@ -226,7 +248,7 @@ def team_names_enum_setup(team_names: list[str]) -> str:
     return output
 
 
-@app.get("/add_points")
+@app.get("/add_points", dependencies=[Depends(require_api_key)])
 async def add_points_endpoint(name: str, value: int):
     LOW_VALUE = 1
     HIGH_VALUE = 100
@@ -255,7 +277,7 @@ async def add_points(team_name: str, amount: int):
         )
 
 @app.get("/entry_exists_status")
-async def set_point_exists_status(entry_id: int, exists: bool):
+async def set_point_exists_status(entry_id: int, exists: bool, dependencies=[Depends(require_api_key)]):
     pool = await get_pool()
 
     async with pool.acquire() as conn:
@@ -432,7 +454,7 @@ async def islands_setup():
 
 
 
-@app.get("/restart")
+@app.get("/restart", dependencies=[Depends(require_api_key)])
 async def restart():
     await clear_db()
     await islands_setup()

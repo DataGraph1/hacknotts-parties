@@ -1,7 +1,7 @@
 export default function Header() {
     return (
-        <div style={{ padding: 30 }}>
-            <h2>Backend</h2>
+        <div style={{ padding: 10 }}>
+            <h2>Admin Panel</h2>
         </div>
     )
 }

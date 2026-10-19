@@ -49,13 +49,10 @@ export default function Viewer() {
             add_islands_load
         );
 
-        const teamNames = ["PS2", "Xbox"];
-        for (const name of teamNames) {
-            httpGetAsync(
-                "http://localhost:8000/get_sum_points",
-                add_points_load
-            );
-        }
+        httpGetAsync(
+            "http://localhost:8000/get_sum_points",
+            add_points_load
+        );
     }, [])
 
     function add_islands_load(data) {
@@ -130,7 +127,7 @@ export default function Viewer() {
         };
       }
     
-      function stopListening() {
+    function stopListening() {
         eventSourceRef.current?.close();
         eventSourceRef.current = null;
         setListening(false);
